@@ -32,16 +32,37 @@ SELECT phone FROM users1;
 ALTER TABLE users1 ADD COLUMN Extension varchar(20);
 
 
-UPDATE users1
-SET Extension=SUBSTRING_INDEX(phone,'x',-1)
-WHERE LOWER(phone) LIKE '%x%';
+CREATE FUNCTION dbo.fn_CleanPhoneNumber1 (
+    @input NVARCHAR(50)
+)
+RETURNS NVARCHAR(20)
+AS
+BEGIN
+    DECLARE @cleaned NVARCHAR(50);
 
-UPDATE users1
-SET phone=SUBSTRING_INDEX(phone,'x',1)
-WHERE LOWER(phone) LIKE '%x%';
+    SET @cleaned = @input;
+    
+    SET @cleaned = REPLACE(@cleaned, '+', '');
+    SET @cleaned = REPLACE(@cleaned, '-', '');
+    SET @cleaned = REPLACE(@cleaned, '.', '');
+    SET @cleaned = REPLACE(@cleaned, '(', '');
+    SET @cleaned = REPLACE(@cleaned, ')', '');
+    SET @cleaned = REPLACE(@cleaned, ' ', '');
 
-UPDATE users1 
-SET phone=REGEXP_REPLACE(REGEXP_REPLACE(phone,'^(\\+1|001)',''),'[^0-9]','');
+    
+    
+    IF LEFT(@cleaned, 3) = '001'
+        SET @cleaned = SUBSTRING(@cleaned, 4, LEN(@cleaned));
+    ELSE IF LEFT(@cleaned, 1) = '1' AND LEN(@cleaned) = 11
+        SET @cleaned = SUBSTRING(@cleaned, 2, LEN(@cleaned));
+
+    RETURN @cleaned;
+END;
+
+SELECT 
+  phone,
+  dbo.fn_CleanPhoneNumber1(phone) AS cleaned_phone
+FROM users1;
 
 UPDATE users1 
 SET phone=CONCAT(
