@@ -672,3 +672,37 @@ SELECT
   FROM user_loan_counts u 
   CROSS JOIN total_loan_count t 
 ORDER BY loan_count DESC ;
+
+--36.Which users have submitted the highest number of support tickets?
+
+WITH TicketCounts AS (
+    SELECT 
+        user_id,
+        COUNT(*) AS ticket_count
+    FROM Support_Tickets
+    GROUP BY user_id
+),
+RankedUsers AS (
+    SELECT *,
+           DENSE_RANK() OVER (ORDER BY ticket_count DESC) AS ticket_rank
+    FROM TicketCounts
+)
+SELECT ru.*, u.first_name, u.last_name
+FROM RankedUsers ru
+JOIN Users u ON u.user_id = ru.user_id
+WHERE ru.ticket_rank <= 5;
+
+--37.Which users have made transactions, and what was the amount of their most recent transaction?
+--Also,what is their current account balance?
+
+CREATE VIEW vw_userlasttransaction AS 
+WITH rank_transactions AS (
+SELECT t.user_id,t.amount,t.transaction_date AS last_transaction_date
+,
+ROW_NUMBER() OVER (PARTITION BY t.user_id ORDER BY t.transaction_date DESC)AS ROW_num
+FROM transactions t)
+SELECT rn.user_id,concat(u.first_name,' ',u.last_name)AS Full_Name,rn.amount AS last_transaction_amount,
+rn.transaction_date,u.account_balance,rn.ROW_num
+FROM users u 
+LEFT JOIN rank_transactions rn ON rn.user_id=u.user_id
+WHERE ROW_num=1;
