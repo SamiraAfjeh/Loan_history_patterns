@@ -103,46 +103,62 @@ WHERE  DATE_ADD(l.start_date,INTERVAL l.term_months MONTH ) <= CURDATE();
 
 -- 9.Classifies each loan's status based on repayments and due date (CTE version)
 
-WITH repayments_summary AS (
-  SELECT
-    loan_id,
-    SUM(amount) AS total_repaid
-  FROM repayments
-  GROUP BY loan_id
-),
-loan_details AS (
-  SELECT
-    l.loan_id,
-    l.user_id,
-    u.first_name,
-    u.last_name,
-    l.amount AS loan_amount,
-    l.start_date,
-    l.term_months,
-    DATE_ADD(l.start_date, INTERVAL l.term_months MONTH) AS end_date,
-    COALESCE(rs.total_repaid, 0) AS total_repaid
-  FROM loans l
-  LEFT JOIN repayments_summary rs ON l.loan_id = rs.loan_id
-  JOIN users1 u ON l.user_id = u.user_id
-)
-SELECT
-  user_id,
-  first_name,
-  last_name,
-  loan_id,
-  loan_amount,
-  total_repaid,
-  start_date,
-  end_date,
-  DATEDIFF(end_date, CURDATE()) AS days_past_due,
-  CASE 
-    WHEN total_repaid >= loan_amount THEN 'Repaid'
-    WHEN end_date < CURDATE() THEN 'Overdue'
-    ELSE 'Active'
-  END AS loan_status
-FROM loan_details
-ORDER BY user_id;
+-- 📊 Loan Summary Report per User
+-- Includes repayment ratio, status, and timing
+-- ========================================
 
+WITH loans_cte AS (
+    SELECT 
+        l.user_id,
+        l.loan_id,
+        l.term_months,
+        l.amount AS loan_amount,
+        l.start_date,
+        -- Calculate loan end date by adding term in months
+        CAST(DATEADD(MONTH, l.term_months, l.start_date) AS DATE) AS end_date
+    FROM loans l
+)
+
+SELECT 
+    -- 👤 Full name of the user
+    u.first_name + ' ' + u.last_name AS full_name,
+    
+    -- 🔢 Loan details
+    lc.loan_id,
+    lc.start_date,
+    lc.end_date,
+    COALESCE(lc.loan_amount, 0) AS loan_amount,
+
+    -- 💰 Total amount repaid toward this loan
+    ROUND(COALESCE(SUM(r.amount), 0), 2) AS total_repaid,
+
+    -- 📈 Repayment ratio (total repaid / loan amount)
+    CAST(COALESCE(SUM(r.amount), 0) AS FLOAT) / NULLIF(COALESCE(lc.loan_amount, 0), 0) AS repayment_ratio,
+
+    -- 💸 Difference between what was repaid and the original loan
+    COALESCE(SUM(r.amount), 0) - COALESCE(lc.loan_amount, 0) AS repayment_difference,
+
+    -- ⏳ Days until loan is due (negative = overdue)
+    DATEDIFF(DAY, GETDATE(), lc.end_date) AS days_to_due,
+
+    -- 📌 Loan status
+    CASE 
+        WHEN COALESCE(SUM(r.amount), 0) >= COALESCE(lc.loan_amount, 0) THEN 'Repaid'
+        WHEN lc.end_date < CAST(GETDATE() AS DATE) THEN 'Overdue'
+        ELSE 'Active'
+    END AS loan_status
+
+FROM users u
+JOIN loans_cte lc ON u.user_id = lc.user_id
+LEFT JOIN repayments r ON r.loan_id = lc.loan_id
+
+-- Grouping ensures we aggregate repayments per loan
+GROUP BY 
+    u.first_name, u.last_name,
+    lc.loan_id,
+    lc.loan_amount,
+    lc.start_date,
+    lc.end_date;
 -- 10.Find users who made 2 or more transactions on the same day.
 
 WITH  daily_transaction_counts AS (
