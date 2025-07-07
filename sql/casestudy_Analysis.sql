@@ -1,6 +1,3 @@
-
-
-
 -- 1.Lists users with their full name, number of transactions, and total amount spent, ordered by the highest spender.
 
 SELECT u.user_id,CONCAT(u.first_name,'  ' ,u.last_name)AS Full_name,
@@ -722,3 +719,44 @@ rn.transaction_date,u.account_balance,rn.ROW_num
 FROM users u 
 LEFT JOIN rank_transactions rn ON rn.user_id=u.user_id
 WHERE ROW_num=1;
+
+--38.This SQL query summarizes support ticket statuses (Open, Closed, Pending) for each user in a single descriptive column.
+It uses conditional aggregation and CONCAT to display the ticket counts in one row per user_id.
+
+SELECT 
+  user_id,
+  CONCAT(
+    'Open: ', SUM(CASE WHEN status = 'Open' THEN 1 ELSE 0 END),
+    ', Closed: ', SUM(CASE WHEN status = 'Closed' THEN 1 ELSE 0 END),
+    ', Pending: ', SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END)
+  ) AS ticket_summary
+FROM support_tickets
+GROUP BY user_id
+ORDER BY user_id;
+
+--39.This stored procedure updates a user's account balance based on the transaction type. 
+It supports both deposits and withdrawals, and ensures the update happens within a transaction block.
+
+CREATE PROCEDURE UpdateAccountBalance
+    @UserId INT,
+    @Amount DECIMAL(18,2),
+    @TransactionType VARCHAR(10)
+AS
+BEGIN
+    BEGIN TRANSACTION;
+
+    IF @TransactionType = 'deposit'
+    BEGIN
+        UPDATE users
+        SET account_balance = account_balance + @Amount
+        WHERE user_id = @UserId;
+    END
+    ELSE IF @TransactionType = 'withdrawal'
+    BEGIN
+        UPDATE users
+        SET account_balance = account_balance - @Amount
+        WHERE user_id = @UserId;
+    END
+
+    COMMIT TRANSACTION;
+END;
